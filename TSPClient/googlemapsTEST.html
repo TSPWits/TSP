@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html>
+  <head>
+<meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+<meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+<title>Distance Matrix Sample</title>
+<script type="text/javascript" src="http://maps.googleapis.com/maps/api/js?sensor=false&libraries=places"></script> /* added the places library & apis */
+
+<script type="text/javascript">
+  // Arrays for the origins and destinations inputs
+  var origins = new Array();
+  var destinations = new Array();
+ 
+  // Initial query parameters
+  var query = {
+    travelMode: google.maps.TravelMode.DRIVING,
+    unitSystem: google.maps.UnitSystem.METRIC
+  };
+
+	document.write("hey now brown cow");
+
+  // Google Distance Matrix Service
+  var dms;
+
+  // Interval and Limit values for tracking origins groupings (for staying within QUERY_LIMIT)
+  var originsInterval = 0;
+  var originsLimit;
+  
+  // Query Limit - 100 is the non-premier query limit as of this update
+  var QUERY_LIMIT = 100;
+  
+  /*
+* Updates the query, then uses the Distance Matrix Service
+*/
+  function updateMatrix() {
+    updateQuery();
+    dms.getDistanceMatrix(query, function(response, status) {
+        if (status == "OK") {
+          populateTable(response.rows);
+        }else{
+            alert("There was a problem with the request. The reported error is '"+status+"'");
+        }
+      }
+    );
+  }
+  
+  /*
+* Generates a table in 'matrix' element for populating dms results
+*/
+  function createTable() {
+    var table = document.getElementById('matrix');
+    var tr = addRow(table);
+    addElement(tr);
+    for (var j = 0; j < destinations.length; j++) {
+      var td = addElement(tr);
+      td.setAttribute("class", "destination");
+      td.appendChild(document.createTextNode(destinations[j]));
+    }
+ 
+    for (var i = 0; i < origins.length; i++) {
+      var tr = addRow(table);
+      var td = addElement(tr);
+      td.setAttribute("class", "origin");
+      td.appendChild(document.createTextNode(origins[i]));
+      for (var j = 0; j < destinations.length; j++) {
+        var td = addElement(tr, 'element-' + i + '-' + j);
+      }
+    }
+  }
+  
+  /*
+* Retrieves origins and destinations from textareas and
+* determines how to build the entire matrix within query limitations
+*/
+  function getInputs(){
+    var originsString = document.getElementById('origins').value;
+    var destinationsString = document.getElementById('destinations').value;
+    
+    origins = originsString.split("|");
+    destinations = destinationsString.split("|");
+    
+    query.destinations = destinations;
+    originsLimit = Math.floor(QUERY_LIMIT/destinations.length);
+    if(originsLimit > 25){
+        originsLimit = 25;
+    }
+  }
+  
+  /*
+* Updates the query based on the known sizes of origins and destinations
+*/
+  function updateQuery(){
+    if(origins.length * destinations.length < QUERY_LIMIT && originsLimit < 25){
+        query.origins = origins;
+        originsInterval=1;
+    }else{
+        query.origins = origins.slice(originsLimit*originsInterval,originsLimit*(originsInterval+1));
+        originsInterval++;
+    }
+  }
+  
+  /*
+* Initializes the matrix data and pulls the first set of near 100 results
+*/
+  function matrixInit(){
+    dms = new google.maps.DistanceMatrixService();
+    getInputs();
+    createTable();
+    updateMatrix();
+    disableButton('initButton');
+  }
+  
+  /*
+* Accepts rows and populates table content. Error validation is limited to the "ZERO_RESULTS"
+* return status. originsLimit and originsInterval are used to find the correct table cell.
+*/
+  function populateTable(rows) {
+    var elementX;
+    for (var i = 0; i < rows.length; i++) {
+      for (var j = 0; j < rows[i].elements.length; j++) {
+        elementX = originsLimit*(originsInterval-1) + i;
+        if(rows[i].elements[j].status != "ZERO_RESULTS"){
+            var distance = rows[i].elements[j].distance.text;
+            var duration = rows[i].elements[j].duration.text;
+            var td = document.getElementById('element-' + elementX + '-' + j);
+            td.innerHTML = distance + "<br />" + duration;
+        }else{
+            var td = document.getElementById('element-' + elementX + '-' + j);
+            td.innerHTML = "No results available," + "<br />" + "Check your location.";
+        }
+      }
+    }
+    
+    if(origins.length <= elementX+1){
+        disableButton('updateButton');
+        enableButton('clearButton');
+    }else{
+        disableButton('updateButton');
+        setTimeout("enableUpdateButton()",10000);
+        document.getElementById('updateButton').value="Wait 10 seconds...";
+    }
+  }
+  
+  /*
+* Updates the query parameter for unitSystem when the unit select option is changed
+*/
+  function updateUnits() {
+    switch (document.getElementById("units").value) {
+      case "km":
+        query.unitSystem = google.maps.UnitSystem.METRIC;
+        break;
+      case "mi":
+        query.unitSystem = google.maps.UnitSystem.IMPERIAL;
+        break;
+    }
+    updateMatrix();
+  }
+ 
+  /*
+* Adds a row to the provided table element
+*/
+  function addRow(table) {
+    var tr = document.createElement('tr');
+    table.appendChild(tr);
+    return tr;
+  }
+  
+  /*
+* Adds a cell with provided id to the provided row
+*/
+  function addElement(tr, id) {
+    var td = document.createElement('td');
+    if (id) {
+      td.setAttribute('id', id);
+    }
+    tr.appendChild(td);
+    return td;
+  }
+  
+  /*
+* Disables a button using the provided elementId
+*/
+  function disableButton(buttonId){
+    document.getElementById(buttonId).disabled=true;
+  }
+  
+  /*
+* Enables a button using the provided elementId
+*/
+  function enableButton(buttonId){
+    document.getElementById(buttonId).disabled=false;
+  }
+  
+  /*
+* Renames the updateButton and enables it.
+*/
+  function enableUpdateButton(){
+    enableButton('updateButton');
+    document.getElementById('updateButton').value="Add more values";
+  }
+
+  /*
+* Clears the results table and resets button states
+*/
+  function clearTable(){
+    var table = document.getElementById('matrix');
+    var rowCount = table.rows.length;
+ 
+    for(var i=0; i<rowCount; i++) {
+        table.deleteRow(0);
+    }
+    
+    originsInterval = 0;
+    originsLimit = null;
+       
+    disableButton('clearButton');
+    enableButton('initButton');
+  }
+  
+  /*
+* Shows/Hides instructions when link is clicked.
+*/
+  function instructionsShowHide(){
+    var instructions = document.getElementById('instructions');
+    var instructionsLink = document.getElementById('instructionsLink');
+    if(instructions.style.display == "none"){
+        instructions.style.display = "block";
+        instructionsLink.innerHTML = "Hide Instructions";
+    }else{
+        instructions.style.display = "none";
+        instructionsLink.innerHTML = "Show Instructions";
+    }
+    
+  }
+
+/*------------------------------- The new Shit ----------------------------------------- */
+
+function initialize() {
+        var mapOptions = {
+          center: new google.maps.LatLng(-33.8688, 151.2195),
+          zoom: 13,
+          mapTypeId: google.maps.MapTypeId.ROADMAP
+        };
+        var map = new google.maps.Map(document.getElementById('map_canvas'),
+          mapOptions);
+
+        var input = document.getElementById('searchTextField');
+        var autocomplete = new google.maps.places.Autocomplete(input);
+
+        autocomplete.bindTo('bounds', map);
+
+        var infowindow = new google.maps.InfoWindow();
+        var marker = new google.maps.Marker({
+          map: map
+        });
+
+        google.maps.event.addListener(autocomplete, 'place_changed', function() {
+          infowindow.close();
+          var place = autocomplete.getPlace();
+          if (place.geometry.viewport) {
+            map.fitBounds(place.geometry.viewport);
+          } else {
+            map.setCenter(place.geometry.location);
+            map.setZoom(17);  // Why 17? Because it looks good.
+          }
+
+          var image = new google.maps.MarkerImage(
+              place.icon,
+              new google.maps.Size(71, 71),
+              new google.maps.Point(0, 0),
+              new google.maps.Point(17, 34),
+              new google.maps.Size(35, 35));
+          marker.setIcon(image);
+          marker.setPosition(place.geometry.location);
+
+          var address = '';
+          if (place.address_components) {
+            address = [(place.address_components[0] &&
+                        place.address_components[0].short_name || ''),
+                       (place.address_components[1] &&
+                        place.address_components[1].short_name || ''),
+                       (place.address_components[2] &&
+                        place.address_components[2].short_name || '')
+                      ].join(' ');
+          }
+
+          infowindow.setContent('<div><strong>' + place.name + '</strong><br>' + address);
+          infowindow.open(map, marker);
+        });
+
+        // Sets a listener on a radio button to change the filter type on Places
+        // Autocomplete.
+        function setupClickListener(id, types) {
+          var radioButton = document.getElementById(id);
+          google.maps.event.addDomListener(radioButton, 'click', function() {
+            autocomplete.setTypes(types);
+          });
+        }
+
+        setupClickListener('changetype-all', []);
+        setupClickListener('changetype-establishment', ['establishment']);
+        setupClickListener('changetype-geocode', ['geocode']);
+      }
+      google.maps.event.addDomListener(window, 'load', initialize);
+
+
+
+</script>
+<style type="text/css"> 		/* added the type here */
+body {
+  font-family: sans-serif;
+  font-size:.8em;
+}
+
+#map_canvas {
+	
+
+        height: 400px;
+        width: 600px;
+        margin-top: 0.6em;
+      }							/* this is new */
+ 
+#container {
+  width:100%;
+  padding:15px;
+}
+ 
+#matrix {
+  font-size: 10px;
+  border-collapse: collapse;
+}
+ 
+.origin,.destination {
+  font-weight: bold;
+  text-align: center;
+  background-color: #e0ffe0;
+}
+ 
+#instructions {
+  padding: 10px;
+}
+
+#queryInputs{
+  margin-top: 10px;
+}
+ 
+td {
+  border: 1px solid grey;
+  width: 100px;
+  cursor: default;
+  background-color: #ffffff;
+}
+
+a {
+  text-decoration: underline;
+  color: blue;
+  cursor: pointer;
+}
+  
+input, select, textarea{
+  margin: 10px 10px 15px 10px;
+}
+  
+</style>
+</head>
+<body>
+<div id="container">
+  <div id="controls">
+    <a id="instructionsLink" onclick="instructionsShowHide()">Hide Instructions</a>
+    <div id="instructions">
+    Enter pipe delimited origins and destinations. Optionally, modify the output units to specify imperial or metric results (default is metric); due to the results limitations, changes to the unit system will only affect future requests - it will not affect data already present in the table. You must limit your destinations to 25 in this utility. Acceptable values for origins or destinations are:<br />
+    <ul>
+        <li>Text that Google identifies as a single location</li>
+        <li>Latitude and longitude values separated by a comma</li>
+    </ul>
+    Examples that work:
+    <ul>
+        <li>36,-75|34.222,-100.444</li>
+        <li>Lewiston, ME|Midland,MI</li>
+    </ul>
+    Examples that may cause problems:
+    <ul>
+        <li>36 -75|34.222,-300.444</li>
+        <li>Lewiston|Midland</li>
+    </ul>
+    </div>
+    <form id="queryInputs">
+        Unit System:<br />
+        <select id="units" onChange="updateUnits()">
+          <option value="km" selected="selected">Metric</option>
+          <option value="mi">Imperial</option>
+        </select><br />
+        Origins:<br />
+        <textarea id="origins" rows="5" cols="50">adams,wa|asotin,wa</textarea><br />
+        Destinations:<br />
+        <textarea id="destinations" rows="5" cols="50">48.191405, -124.075584|48.149733, -123.147240</textarea><br />
+        <input type="button" id="initButton" onClick="matrixInit()" value="Get matrix"></button>
+        <input type="button" id="updateButton" onClick="updateMatrix()" disabled="true" value="Add more values"></button>
+        <input type="button" id="clearButton" onClick="clearTable()" disabled="true" value="Clear matrix"></button>
+    </form>
+  </div>
+  <table id="matrix"></table>
+</div>
+
+/*------------------------------- Also New Shit ------------------------------------------ */
+
+<div>
+      <input id="searchTextField" type="text" size="50">
+      <input type="radio" name="type" id="changetype-all" checked="checked">
+      <label for="changetype-all">All</label>
+
+      <input type="radio" name="type" id="changetype-establishment">
+      <label for="changetype-establishment">Establishments</label>
+
+      <input type="radio" name="type" id="changetype-geocode">
+      <label for="changetype-geocode">Geocodes</lable>
+    </div>
+    <div id="map_canvas"></div>
+
+</body>
+</html>
